@@ -1,0 +1,32 @@
+name: Executar Monitoramento
+
+on:
+  schedule:
+    - cron: '0 0 */2 * *'  # A cada 2 dias às 00h UTC
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: pip install requests beautifulsoup4
+
+      - name: Executar script
+        run: python script.py
+
+      - name: Salvar resultados
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add resultados.json || true
+          git commit -m "Atualização automática: resultados" || echo "Sem mudanças"
+          git push || echo "Sem permissão para push"
