@@ -9,7 +9,7 @@ import json
 # CONFIG
 KEYWORDS = ["Seu Nome Aqui"]
 URLS = [
-    ""https://ioepa.com.br/pages/2025/",
+    "https://ioepa.com.br/pages/2025/",
     "https://cdn.cebraspe.org.br/concursos/STM_25/arquivos/"
 ]
 RESULTS_FILE = "resultados.json"
