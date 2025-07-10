@@ -5,9 +5,10 @@ from bs4 import BeautifulSoup
 import re
 import datetime
 import json
+import unicodedata
 
 # CONFIG
-KEYWORDS = ["Seu Nome Aqui"]
+KEYWORDS = ["Fagner do Espírito Santo Sá"]  # Pode usar acento, o código normaliza
 URLS = [
     "https://cdn.cebraspe.org.br/concursos/STM_25/arquivos/Ed_6_2025_STM_Res_Final_Obj_Prov_Discursiva_Analista.pdf",
     "https://ioepa.com.br/pages/2025/",
@@ -15,7 +16,26 @@ URLS = [
 ]
 RESULTS_FILE = "resultados.json"
 
-# Função para extrair texto de página HTML
+# === Funções auxiliares ===
+
+# Remove acentos, quebra de linha e normaliza para comparação
+def normalizar(texto):
+    texto = unicodedata.normalize('NFD', texto)
+    texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')  # Remove acentos
+    texto = re.sub(r'[\r\n\f\t]', ' ', texto)  # Remove quebras
+    texto = re.sub(r'\s+', ' ', texto)  # Espaços duplos
+    return texto.lower()
+
+# Verifica se alguma palavra-chave normalizada aparece no texto normalizado
+def buscar_palavra_chave(texto):
+    texto_limpo = normalizar(texto)
+    for k in KEYWORDS:
+        k_limpo = normalizar(k)
+        if re.search(rf"\b{k_limpo}\b", texto_limpo):
+            return True
+    return False
+
+# Extrai texto de página HTML
 def extrair_texto_html(url):
     try:
         resp = requests.get(url, timeout=10)
@@ -23,22 +43,23 @@ def extrair_texto_html(url):
         texto = soup.get_text(separator=' ', strip=True)
         return texto
     except Exception as e:
+        print(f"[Erro HTML] {url}: {e}")
         return ""
 
-# Verifica se alguma palavra-chave está no texto
-def buscar_palavra_chave(texto):
-    for k in KEYWORDS:
-        if re.search(rf"\b{k}\b", texto, re.IGNORECASE):
-            return True
-    return False
+# === Função principal ===
 
-# Função principal
 def verificar_sites():
     registros = []
     data_atual = datetime.datetime.now().isoformat()
 
     for url in URLS:
         print(f"Verificando {url}...")
+
+        # Somente páginas HTML são tratadas neste script
+        if url.lower().endswith(".pdf"):
+            print(f" (PDF ignorado por enquanto: {url})")
+            continue
+
         texto = extrair_texto_html(url)
 
         if buscar_palavra_chave(texto):
@@ -55,7 +76,7 @@ def verificar_sites():
     except:
         dados_anteriores = []
 
-    # Adiciona novos
+    # Adiciona novos e ordena
     dados_anteriores.extend(registros)
     dados_anteriores.sort(key=lambda x: x["data"], reverse=True)
 
