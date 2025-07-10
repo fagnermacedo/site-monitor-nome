@@ -24,9 +24,12 @@ jobs:
         run: python script.py
 
       - name: Salvar resultados
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
           git add resultados.json || true
           git commit -m "Atualização automática: resultados" || echo "Sem mudanças"
-          git push || echo "Sem permissão para push"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git || echo "Sem permissão para push"
+
