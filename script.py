@@ -2,13 +2,15 @@
 
 import requests
 from bs4 import BeautifulSoup
+import fitz  # PyMuPDF
 import re
 import datetime
 import json
 import unicodedata
+import io
 
 # CONFIG
-KEYWORDS = ["Fagner do Espírito Santo Sá"]  # Pode usar acento, o código normaliza
+KEYWORDS = ["Fagner do Espírito Santo Sá"]
 URLS = [
     "https://cdn.cebraspe.org.br/concursos/STM_25/arquivos/Ed_6_2025_STM_Res_Final_Obj_Prov_Discursiva_Analista.pdf",
     "https://ioepa.com.br/pages/2025/",
@@ -16,17 +18,15 @@ URLS = [
 ]
 RESULTS_FILE = "resultados.json"
 
-# === Funções auxiliares ===
+# === Normalização e busca ===
 
-# Remove acentos, quebra de linha e normaliza para comparação
 def normalizar(texto):
     texto = unicodedata.normalize('NFD', texto)
-    texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')  # Remove acentos
-    texto = re.sub(r'[\r\n\f\t]', ' ', texto)  # Remove quebras
-    texto = re.sub(r'\s+', ' ', texto)  # Espaços duplos
+    texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')  # remove acentos
+    texto = re.sub(r'[\r\n\f\t]', ' ', texto)  # remove quebras de linha e página
+    texto = re.sub(r'\s+', ' ', texto)  # colapsa espaços
     return texto.lower()
 
-# Verifica se alguma palavra-chave normalizada aparece no texto normalizado
 def buscar_palavra_chave(texto):
     texto_limpo = normalizar(texto)
     for k in KEYWORDS:
@@ -35,7 +35,8 @@ def buscar_palavra_chave(texto):
             return True
     return False
 
-# Extrai texto de página HTML
+# === Extração de conteúdo ===
+
 def extrair_texto_html(url):
     try:
         resp = requests.get(url, timeout=10)
@@ -44,6 +45,23 @@ def extrair_texto_html(url):
         return texto
     except Exception as e:
         print(f"[Erro HTML] {url}: {e}")
+        return ""
+
+def extrair_texto_pdf(url):
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            with io.BytesIO(resp.content) as f:
+                doc = fitz.open(stream=f, filetype="pdf")
+                texto = ""
+                for page in doc:
+                    texto += page.get_text()
+                return texto
+        else:
+            print(f"[Erro PDF] {url}: status {resp.status_code}")
+            return ""
+    except Exception as e:
+        print(f"[Erro PDF] {url}: {e}")
         return ""
 
 # === Função principal ===
@@ -55,12 +73,10 @@ def verificar_sites():
     for url in URLS:
         print(f"Verificando {url}...")
 
-        # Somente páginas HTML são tratadas neste script
         if url.lower().endswith(".pdf"):
-            print(f" (PDF ignorado por enquanto: {url})")
-            continue
-
-        texto = extrair_texto_html(url)
+            texto = extrair_texto_pdf(url)
+        else:
+            texto = extrair_texto_html(url)
 
         if buscar_palavra_chave(texto):
             registros.append({
@@ -69,14 +85,14 @@ def verificar_sites():
                 "trecho": texto[:300] + "..."
             })
 
-    # Carrega dados antigos
+    # Carrega histórico
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
             dados_anteriores = json.load(f)
     except:
         dados_anteriores = []
 
-    # Adiciona novos e ordena
+    # Adiciona novos registros
     dados_anteriores.extend(registros)
     dados_anteriores.sort(key=lambda x: x["data"], reverse=True)
 
