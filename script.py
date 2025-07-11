@@ -139,6 +139,10 @@ def verificar_sites():
         arquivos = []
         if url.lower().endswith(('.pdf', '.txt')):
             arquivos = [url]
+        elif "cdn.cebraspe.org.br" in url:
+            arquivos = listar_arquivos_de_diretorio(url)
+        elif "ioepa.com.br" in url:
+            arquivos = listar_arquivos_com_selenium(url)
         elif "cebraspe.org.br" in url:
             arquivos = listar_arquivos_com_selenium(url)
         else:
