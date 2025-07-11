@@ -11,6 +11,7 @@ import os
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+import tempfile
 import time
 
 # CONFIGURAÇÕES
@@ -75,24 +76,37 @@ def listar_arquivos_com_selenium(url):
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--remote-debugging-port=9222")
+
+        # SOLUÇÃO: diretório de usuário temporário
+        temp_dir = tempfile.mkdtemp()
+        options.add_argument(f"--user-data-dir={temp_dir}")
+
+        # Chrome em ambiente Linux do GitHub Actions
+        options.binary_location = "/usr/bin/chromium-browser"
         driver = webdriver.Chrome(options=options)
 
         driver.get(url)
-        time.sleep(5)  # aguarda carregar JavaScript
+        import time
+        time.sleep(5)
 
         html = driver.page_source
         driver.quit()
 
+        from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
         links = [a['href'] for a in soup.find_all('a', href=True)
                  if a['href'].lower().endswith(('.pdf', '.txt'))]
 
-        # Corrige links relativos
+        # Corrigir links relativos
         final_links = []
         for link in links:
             if link.startswith("http"):
                 final_links.append(link)
             elif link.startswith("/"):
+                import re
                 base = re.match(r"^(https?://[^/]+)", url).group(1)
                 final_links.append(base + link)
             else:
