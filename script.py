@@ -62,6 +62,22 @@ def extrair_texto_pdf(url):
         print(f"[Erro PDF] {url}: {e}")
         return ""
 
+def extrair_texto_txt(url):
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            # Decodifica UTF-8 removendo BOM, normaliza espaços
+            texto = resp.content.decode('utf-8-sig')
+            texto = re.sub(r'[\r\n\f\t]+', ' ', texto)
+            texto = re.sub(r'\s+', ' ', texto).strip()
+            return texto
+        else:
+            print(f"[Erro TXT] {url}: status {resp.status_code}")
+            return ""
+    except Exception as e:
+        print(f"[Erro TXT] {url}: {e}")
+        return ""
+
 def extrair_texto_html(url):
     try:
         resp = requests.get(url, timeout=10)
@@ -71,7 +87,7 @@ def extrair_texto_html(url):
         print(f"[Erro HTML] {url}: {e}")
         return ""
 
-# === FUNÇÃO PARA LISTAR PDFs USANDO SELENIUM ===
+# === FUNÇÃO PARA LISTAR ARQUIVOS COM SELENIUM ===
 
 def listar_arquivos_com_selenium(url):
     print(f"🧭 Buscando arquivos na página (Selenium): {url}")
@@ -83,22 +99,20 @@ def listar_arquivos_com_selenium(url):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--remote-debugging-port=9222")
 
-        # SOLUÇÃO: diretório de usuário temporário
+        # Diretório temporário de usuário para evitar erro no GitHub Actions
         temp_dir = tempfile.mkdtemp()
         options.add_argument(f"--user-data-dir={temp_dir}")
 
-        # Chrome em ambiente Linux do GitHub Actions
+        # Executável chromium no runner GitHub Actions
         options.binary_location = "/usr/bin/chromium-browser"
         driver = webdriver.Chrome(options=options)
 
         driver.get(url)
-        import time
-        time.sleep(5)
+        time.sleep(5)  # espera a página carregar
 
         html = driver.page_source
         driver.quit()
 
-        from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
         links = [a['href'] for a in soup.find_all('a', href=True)
                  if a['href'].lower().endswith(('.pdf', '.txt'))]
@@ -118,6 +132,32 @@ def listar_arquivos_com_selenium(url):
         return final_links
     except Exception as e:
         print(f"[Erro Selenium] {url}: {e}")
+        return []
+
+# === FUNÇÃO PARA LISTAR ARQUIVOS EM DIRETÓRIOS SIMPLES ===
+
+def listar_arquivos_de_diretorio(url):
+    print(f"🗂️ Buscando arquivos em diretório simples: {url}")
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            print(f"[Erro Diretório] {url}: status {resp.status_code}")
+            return []
+
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        links = [a['href'] for a in soup.find_all('a', href=True)
+                 if a['href'].lower().endswith(('.pdf', '.txt'))]
+
+        final_links = []
+        for link in links:
+            if link.startswith("http"):
+                final_links.append(link)
+            else:
+                final_links.append(url.rstrip("/") + "/" + link.lstrip("/"))
+
+        return final_links
+    except Exception as e:
+        print(f"[Erro Diretório] {url}: {e}")
         return []
 
 # === VERIFICAÇÃO PRINCIPAL ===
@@ -154,7 +194,12 @@ def verificar_sites():
                 continue
 
             print(f"📄 Lendo arquivo: {arq}")
-            texto = extrair_texto_pdf(arq) if arq.endswith(".pdf") else extrair_texto_html(arq)
+            if arq.endswith(".pdf"):
+                texto = extrair_texto_pdf(arq)
+            elif arq.endswith(".txt"):
+                texto = extrair_texto_txt(arq)
+            else:
+                texto = extrair_texto_html(arq)
 
             if buscar_palavra_chave(texto):
                 print(f"🔎 Palavra-chave encontrada em: {arq}")
@@ -181,32 +226,6 @@ def verificar_sites():
 
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(list(verificados), f, indent=2, ensure_ascii=False)
-
-
-def listar_arquivos_de_diretorio(url):
-    print(f"🗂️ Buscando arquivos em diretório simples: {url}")
-    try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
-            print(f"[Erro Diretório] {url}: status {resp.status_code}")
-            return []
-
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        links = [a['href'] for a in soup.find_all('a', href=True)
-                 if a['href'].lower().endswith(('.pdf', '.txt'))]
-
-        final_links = []
-        for link in links:
-            if link.startswith("http"):
-                final_links.append(link)
-            else:
-                final_links.append(url.rstrip("/") + "/" + link.lstrip("/"))
-
-        return final_links
-    except Exception as e:
-        print(f"[Erro Diretório] {url}: {e}")
-        return []
-
 
 # === EXECUÇÃO ===
 
