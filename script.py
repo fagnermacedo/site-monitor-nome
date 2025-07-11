@@ -1,3 +1,4 @@
+# IMPORTAÇÕES
 import requests
 from bs4 import BeautifulSoup
 import fitz  # PyMuPDF
@@ -6,20 +7,22 @@ import datetime
 import json
 import unicodedata
 import io
-from urllib.parse import urljoin
+import os
 
-# CONFIG
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import time
+
+# CONFIGURAÇÕES
 KEYWORDS = ["Fagner do Espírito Santo Sá"]
 URLS = [
     "https://cdn.cebraspe.org.br/concursos/STM_25/arquivos/",
     "https://www.cebraspe.org.br/concursos/STM_25"
-    #"https://ioepa.com.br/pages/2025/"
 ]
-TIPOS_ARQUIVOS = [".pdf", ".txt"]
 RESULTS_FILE = "resultados.json"
-CACHE_VERIFICADOS = "verificados.json"
+CACHE_FILE = "verificados.json"
 
-# === Normalização e busca ===
+# === FUNÇÕES DE NORMALIZAÇÃO E BUSCA ===
 
 def normalizar(texto):
     texto = unicodedata.normalize('NFD', texto)
@@ -36,17 +39,7 @@ def buscar_palavra_chave(texto):
             return True
     return False
 
-# === Extração de conteúdo ===
-
-def extrair_texto_html(url):
-    try:
-        resp = requests.get(url, timeout=10)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        texto = soup.get_text(separator=' ', strip=True)
-        return texto
-    except Exception as e:
-        print(f"[Erro HTML] {url}: {e}")
-        return ""
+# === EXTRAÇÃO DE CONTEÚDO ===
 
 def extrair_texto_pdf(url):
     try:
@@ -65,66 +58,94 @@ def extrair_texto_pdf(url):
         print(f"[Erro PDF] {url}: {e}")
         return ""
 
-# === Função para descobrir links de arquivos em uma página ===
-
-def listar_arquivos_na_pagina(url_base):
-    arquivos_encontrados = []
+def extrair_texto_html(url):
     try:
-        resp = requests.get(url_base, timeout=10)
+        resp = requests.get(url, timeout=10)
         soup = BeautifulSoup(resp.text, 'html.parser')
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            if any(href.lower().endswith(tipo) for tipo in TIPOS_ARQUIVOS):
-                full_url = urljoin(url_base, href)
-                arquivos_encontrados.append(full_url)
+        return soup.get_text(separator=' ', strip=True)
     except Exception as e:
-        print(f"[Erro ao listar arquivos em {url_base}]: {e}")
-    return arquivos_encontrados
+        print(f"[Erro HTML] {url}: {e}")
+        return ""
 
-# === Função principal ===
+# === FUNÇÃO PARA LISTAR PDFs USANDO SELENIUM ===
+
+def listar_arquivos_com_selenium(url):
+    print(f"🧭 Buscando arquivos na página (Selenium): {url}")
+    try:
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        driver = webdriver.Chrome(options=options)
+
+        driver.get(url)
+        time.sleep(5)  # aguarda carregar JavaScript
+
+        html = driver.page_source
+        driver.quit()
+
+        soup = BeautifulSoup(html, 'html.parser')
+        links = [a['href'] for a in soup.find_all('a', href=True)
+                 if a['href'].lower().endswith(('.pdf', '.txt'))]
+
+        # Corrige links relativos
+        final_links = []
+        for link in links:
+            if link.startswith("http"):
+                final_links.append(link)
+            elif link.startswith("/"):
+                base = re.match(r"^(https?://[^/]+)", url).group(1)
+                final_links.append(base + link)
+            else:
+                final_links.append(url.rstrip("/") + "/" + link)
+
+        return final_links
+    except Exception as e:
+        print(f"[Erro Selenium] {url}: {e}")
+        return []
+
+# === VERIFICAÇÃO PRINCIPAL ===
 
 def verificar_sites():
-    registros = []
     data_atual = datetime.datetime.now().isoformat()
+    registros = []
 
-    # Carrega cache de arquivos já verificados
+    # Carregar cache de arquivos verificados
     try:
-        with open(CACHE_VERIFICADOS, 'r', encoding='utf-8') as f:
+        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
             verificados = set(json.load(f))
     except:
         verificados = set()
 
     for url in URLS:
-        print(f"\n🔍 Verificando {url}...")
+        print(f"\n🔍 Verificando URL: {url}")
 
-        if url.lower().endswith(tuple(TIPOS_ARQUIVOS)):
-            urls_para_verificar = [url]
+        arquivos = []
+        if url.lower().endswith(('.pdf', '.txt')):
+            arquivos = [url]
+        elif "cebraspe.org.br" in url:
+            arquivos = listar_arquivos_com_selenium(url)
         else:
-            urls_para_verificar = listar_arquivos_na_pagina(url)
+            arquivos = []  # futura melhoria: tratar diretórios HTML simples
 
-        for arquivo_url in urls_para_verificar:
-            if arquivo_url in verificados:
-                print(f"⏩ Pulando (já verificado): {arquivo_url}")
+        for arq in arquivos:
+            if arq in verificados:
+                print(f"✔️ Já verificado: {arq}")
                 continue
 
-            print(f"➡️ Analisando: {arquivo_url}")
-            if arquivo_url.endswith(".pdf"):
-                texto = extrair_texto_pdf(arquivo_url)
-            else:
-                texto = extrair_texto_html(arquivo_url)
+            print(f"📄 Lendo arquivo: {arq}")
+            texto = extrair_texto_pdf(arq) if arq.endswith(".pdf") else extrair_texto_html(arq)
 
             if buscar_palavra_chave(texto):
-                print(f"✅ Palavra-chave encontrada em: {arquivo_url}")
+                print(f"🔎 Palavra-chave encontrada em: {arq}")
                 registros.append({
-                    "url": arquivo_url,
+                    "url": arq,
                     "data": data_atual,
                     "trecho": texto[:300] + "..."
                 })
 
-            # Marca como verificado, independente do resultado
-            verificados.add(arquivo_url)
+            verificados.add(arq)
 
-    # Salva histórico de resultados encontrados
+    # Salva resultados
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
             dados_anteriores = json.load(f)
@@ -137,9 +158,10 @@ def verificar_sites():
     with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(dados_anteriores, f, indent=2, ensure_ascii=False)
 
-    # Salva cache atualizado
-    with open(CACHE_VERIFICADOS, 'w', encoding='utf-8') as f:
+    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(list(verificados), f, indent=2, ensure_ascii=False)
+
+# === EXECUÇÃO ===
 
 if __name__ == '__main__':
     verificar_sites()
