@@ -16,6 +16,7 @@ URLS = [
 ]
 TIPOS_ARQUIVOS = [".pdf", ".txt"]
 RESULTS_FILE = "resultados.json"
+CACHE_VERIFICADOS = "verificados.json"
 
 # === Normalização e busca ===
 
@@ -85,17 +86,27 @@ def verificar_sites():
     registros = []
     data_atual = datetime.datetime.now().isoformat()
 
+    # Carrega cache de arquivos já verificados
+    try:
+        with open(CACHE_VERIFICADOS, 'r', encoding='utf-8') as f:
+            verificados = set(json.load(f))
+    except:
+        verificados = set()
+
     for url in URLS:
         print(f"\n🔍 Verificando {url}...")
 
-        urls_para_verificar = []
         if url.lower().endswith(tuple(TIPOS_ARQUIVOS)):
             urls_para_verificar = [url]
         else:
             urls_para_verificar = listar_arquivos_na_pagina(url)
 
         for arquivo_url in urls_para_verificar:
-            print(f"➡️ Analisando arquivo: {arquivo_url}")
+            if arquivo_url in verificados:
+                print(f"⏩ Pulando (já verificado): {arquivo_url}")
+                continue
+
+            print(f"➡️ Analisando: {arquivo_url}")
             if arquivo_url.endswith(".pdf"):
                 texto = extrair_texto_pdf(arquivo_url)
             else:
@@ -109,19 +120,25 @@ def verificar_sites():
                     "trecho": texto[:300] + "..."
                 })
 
-    # Carrega histórico
+            # Marca como verificado, independente do resultado
+            verificados.add(arquivo_url)
+
+    # Salva histórico de resultados encontrados
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
             dados_anteriores = json.load(f)
     except:
         dados_anteriores = []
 
-    # Adiciona novos registros
     dados_anteriores.extend(registros)
     dados_anteriores.sort(key=lambda x: x["data"], reverse=True)
 
     with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(dados_anteriores, f, indent=2, ensure_ascii=False)
+
+    # Salva cache atualizado
+    with open(CACHE_VERIFICADOS, 'w', encoding='utf-8') as f:
+        json.dump(list(verificados), f, indent=2, ensure_ascii=False)
 
 if __name__ == '__main__':
     verificar_sites()
