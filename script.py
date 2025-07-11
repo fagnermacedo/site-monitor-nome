@@ -12,6 +12,7 @@ from urllib.parse import urljoin
 KEYWORDS = ["Fagner do Espírito Santo Sá"]
 URLS = [
     "https://cdn.cebraspe.org.br/concursos/STM_25/arquivos/",
+    "https://www.cebraspe.org.br/concursos/STM_25"
     #"https://ioepa.com.br/pages/2025/"
 ]
 TIPOS_ARQUIVOS = [".pdf", ".txt"]
