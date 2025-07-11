@@ -18,11 +18,16 @@ jobs:
           python-version: '3.11'
 
       - name: Instalar dependências
-        run: pip install -r requirements.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver
+          pip install -r requirements.txt
 
-      - name: Executar script
+      - name: Executar script Python
+        env:
+          PATH: /usr/lib/chromium-browser/:$PATH
         run: python script.py
-
+        
       - name: Salvar resultados
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
