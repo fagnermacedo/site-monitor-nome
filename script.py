@@ -182,6 +182,32 @@ def verificar_sites():
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(list(verificados), f, indent=2, ensure_ascii=False)
 
+
+def listar_arquivos_de_diretorio(url):
+    print(f"🗂️ Buscando arquivos em diretório simples: {url}")
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            print(f"[Erro Diretório] {url}: status {resp.status_code}")
+            return []
+
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        links = [a['href'] for a in soup.find_all('a', href=True)
+                 if a['href'].lower().endswith(('.pdf', '.txt'))]
+
+        final_links = []
+        for link in links:
+            if link.startswith("http"):
+                final_links.append(link)
+            else:
+                final_links.append(url.rstrip("/") + "/" + link.lstrip("/"))
+
+        return final_links
+    except Exception as e:
+        print(f"[Erro Diretório] {url}: {e}")
+        return []
+
+
 # === EXECUÇÃO ===
 
 if __name__ == '__main__':
