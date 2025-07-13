@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Executar script de monitoramento
-        run: python monitor.py
+        run: python script.py
 
       - name: Enviar e-mail com resultados encontrados
         if: success()
