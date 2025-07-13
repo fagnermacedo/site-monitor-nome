@@ -1,61 +1,46 @@
-name: Monitorar e Enviar Email
+name: Monitoramento de Nome
 
 on:
   schedule:
-    - cron: '0 0 */2 * *'
+    - cron: '0 6 */2 * *' # Executa a cada 2 dias às 06:00 UTC (03:00 BRT)
   workflow_dispatch:
 
 jobs:
-  monitorar-e-notificar:
+  run-monitor:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Configurar Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
       - name: Instalar dependências
         run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Executar script Python
-        id: exec
-        run: python script.py
+      - name: Executar script de monitoramento
+        run: python monitor.py
 
-      - name: Verificar se houve mudanças em resultados.json
-        id: diff
-        run: |
-          git add resultados.json verificados.json
-          git diff --cached --exit-code || echo "changed=true" >> $GITHUB_OUTPUT
-
-      - name: Commit & push (se houver mudanças)
-        if: steps.diff.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git commit -m "Atualização automática: resultados"
-          git push
-
-      - name: Enviar e-mail se houver resultados novos
-        if: steps.diff.outputs.changed == 'true'
+      - name: Enviar e-mail com resultados encontrados
+        if: success()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 587
-          username: ${{ secrets.EMAIL_USER }}
-          password: ${{ secrets.EMAIL_PASS }}
-          subject: "Monitoramento de Nome – novos resultados encontrados"
-          to: ${{ secrets.EMAIL_USER }}
-          from: ${{ secrets.EMAIL_USER }}
+          secure: false
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: Monitoramento de Nome – novos resultados encontrados
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_FROM }}
           body: |
             Olá!
 
             Foram encontrados novos resultados no monitoramento de nome.
 
             Consulte o arquivo `resultados.json` no seu repositório para ver os detalhes.
-
-          secure: true
