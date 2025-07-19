@@ -4,6 +4,7 @@ import fitz  # PyMuPDF
 import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin  # 🔧 IMPORTADO PARA CORREÇÃO
 
 # CONFIGURAÇÕES
 KEYWORDS = ["Fagner do Espírito Santo Sá"]
@@ -66,7 +67,7 @@ for base_url in URLS:
     links = extrair_links(base_url)
     for link in links:
         if not link.startswith("http"):
-            link = base_url + link
+            link = urljoin(base_url + "/", link)  # ✅ CORREÇÃO FEITA AQUI
 
         if link in verificados or link in novos_verificados:
             print(f"✔️ Já verificado: {link}")
