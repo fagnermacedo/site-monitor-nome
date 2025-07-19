@@ -1,13 +1,9 @@
 import os
-import re
 import json
-import datetime
+import fitz  # PyMuPDF
 import requests
+from datetime import datetime
 from bs4 import BeautifulSoup
-from PyPDF2 import PdfReader
-from urllib.parse import urljoin
-from io import BytesIO
-from shutil import copyfile
 
 # CONFIGURAÇÕES
 KEYWORDS = ["Fagner do Espírito Santo Sá"]
@@ -21,133 +17,85 @@ URLS = [
 RESULTS_FILE = "resultados.json"
 CACHE_FILE = "verificados.json"
 
+# Funções auxiliares
+def carregar_json(caminho, padrao):
+    if os.path.exists(caminho):
+        with open(caminho, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return padrao
 
-def carregar_cache():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-            return set(json.load(f))
-    return set()
+def salvar_json(dados, caminho):
+    with open(caminho, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
 
-
-def salvar_resultados(resultados):
-    if os.path.exists(RESULTS_FILE):
-        with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
-            dados_existentes = json.load(f)
-    else:
-        dados_existentes = []
-
-    dados_existentes.extend(resultados)
-
-    with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(dados_existentes, f, indent=2, ensure_ascii=False)
-
-
-def extrair_texto_pdf(conteudo):
+def extrair_links(url):
     try:
-        leitor = PdfReader(BytesIO(conteudo))
-        texto = ""
-        for pagina in leitor.pages:
-            texto += pagina.extract_text() or ""
-        return texto
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        return [link.get("href") for link in soup.find_all("a") if link.get("href", "").endswith((".pdf", ".txt"))]
     except Exception as e:
-        print(f"⚠️ Erro ao ler PDF: {e}")
-        return ""
+        print(f"❌ Erro ao acessar {url}: {e}")
+        return []
 
-
-def extrair_texto_txt(conteudo):
+def buscar_ocorrencias_em_pdf(link):
     try:
-        return conteudo.decode('utf-8', errors='ignore')
+        response = requests.get(link, timeout=15)
+        response.raise_for_status()
+        doc = fitz.open("pdf", response.content)
+        texto = "\n".join([page.get_text() for page in doc])
+        return [kw for kw in KEYWORDS if kw.lower() in texto.lower()]
     except Exception as e:
-        print(f"⚠️ Erro ao ler TXT: {e}")
-        return ""
+        print(f"⚠️ Erro ao processar PDF {link}: {e}")
+        return []
 
+# Execução
+verificados = carregar_json(CACHE_FILE, [])
+resultados = carregar_json(RESULTS_FILE, [])
 
-def verificar_sites():
-    verificados = carregar_cache()
-    novos_resultados = []
-    erros = []
-    total_verificados = 0
-    novos_analisados = 0
+diagnostico = {
+    "data_execucao": datetime.now().isoformat(),
+    "total_arquivos_verificados": 0,
+    "arquivos_novos_analisados": 0,
+    "ocorrencias_encontradas": 0,
+    "erros_ocorridos": []
+}
 
-    for url_base in URLS:
-        try:
-            resposta = requests.get(url_base)
-            resposta.raise_for_status()
-            soup = BeautifulSoup(resposta.text, 'html.parser')
+novos_verificados = []
+for base_url in URLS:
+    links = extrair_links(base_url)
+    for link in links:
+        if not link.startswith("http"):
+            link = base_url + link
 
-            links = soup.find_all('a', href=True)
-            for link in links:
-                href = link['href']
-                if href.endswith(('.pdf', '.txt')):
-                    url_completa = urljoin(url_base, href)
-                    total_verificados += 1
+        if link in verificados or link in novos_verificados:
+            print(f"✔️ Já verificado: {link}")
+            continue
 
-                    if url_completa in verificados:
-                        print(f"✔️ Já verificado: {url_completa}")
-                        continue
+        print(f"📄 Lendo arquivo: {link}")
+        diagnostico["total_arquivos_verificados"] += 1
+        ocorrencias = []
 
-                    try:
-                        resp_arquivo = requests.get(url_completa)
-                        resp_arquivo.raise_for_status()
+        if link.endswith(".pdf"):
+            ocorrencias = buscar_ocorrencias_em_pdf(link)
 
-                        print(f"📄 Lendo arquivo: {url_completa}")
-                        if href.endswith('.pdf'):
-                            texto = extrair_texto_pdf(resp_arquivo.content)
-                        else:
-                            texto = extrair_texto_txt(resp_arquivo.content)
+        if ocorrencias:
+            print(f"🔎 Palavra-chave encontrada em {link}")
+            resultados.append({
+                "link": link,
+                "ocorrencias": ocorrencias,
+                "data_encontrada": datetime.now().isoformat()
+            })
+            diagnostico["ocorrencias_encontradas"] += 1
 
-                        encontrou = False
-                        for palavra in KEYWORDS:
-                            if re.search(re.escape(palavra), texto, re.IGNORECASE):
-                                print(f"🔍 Palavra-chave encontrada: '{palavra}' em {url_completa}")
-                                novos_resultados.append({
-                                    "url": url_completa,
-                                    "palavra_chave": palavra,
-                                    "data_encontrado": datetime.datetime.now().isoformat()
-                                })
-                                encontrou = True
-                                break
+        novos_verificados.append(link)
+        diagnostico["arquivos_novos_analisados"] += 1
 
-                        novos_analisados += 1
-                        verificados.add(url_completa)
+# Atualiza cache e resultados
+verificados.extend(novos_verificados)
+salvar_json(sorted(set(verificados)), CACHE_FILE)
+salvar_json(resultados, RESULTS_FILE)
 
-                    except Exception as e:
-                        print(f"❌ Erro ao processar {url_completa}: {e}")
-                        erros.append({"url": url_completa, "erro": str(e)})
-
-        except Exception as e:
-            print(f"❌ Erro ao acessar {url_base}: {e}")
-            erros.append({"url_base": url_base, "erro": str(e)})
-
-    if novos_resultados:
-        salvar_resultados(novos_resultados)
-
-    # SALVAMENTO ROBUSTO DO CACHE
-    try:
-        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(sorted(list(verificados)), f, indent=2, ensure_ascii=False)
-
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = f"verificados_backup_{timestamp}.json"
-        copyfile(CACHE_FILE, backup_path)
-
-        print(f"💾 Cache salvo com sucesso: {len(verificados)} URLs verificados.")
-        print(f"📁 Backup salvo: {backup_path}")
-
-    except Exception as e:
-        print(f"❌ Erro ao salvar o cache: {e}")
-        erros.append({"etapa": "salvar_cache", "erro": str(e)})
-
-    # DIAGNÓSTICO FINAL
-    print("📊 Diagnóstico da execução:")
-    print(json.dumps({
-        "data_execucao": datetime.datetime.now().isoformat(),
-        "total_arquivos_verificados": total_verificados,
-        "arquivos_novos_analisados": novos_analisados,
-        "ocorrencias_encontradas": len(novos_resultados),
-        "erros_ocorridos": erros
-    }, indent=2, ensure_ascii=False))
-
-
-if __name__ == "__main__":
-    verificar_sites()
+# Diagnóstico final
+print("📊 Diagnóstico da execução:")
+print(json.dumps(diagnostico, indent=2, ensure_ascii=False))
