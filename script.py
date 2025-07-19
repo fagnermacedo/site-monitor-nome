@@ -212,6 +212,22 @@ def verificar_sites():
             verificados.add(arq)
 
     # Salva resultados
+    # try:
+    #     with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
+    #         dados_anteriores = json.load(f)
+    # except:
+    #     dados_anteriores = []
+
+    # dados_anteriores.extend(registros)
+    # dados_anteriores.sort(key=lambda x: x["data"], reverse=True)
+
+    # with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
+    #     json.dump(dados_anteriores, f, indent=2, ensure_ascii=False)
+
+    # with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+    #     json.dump(list(verificados), f, indent=2, ensure_ascii=False)
+   
+    # Salva resultados
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
             dados_anteriores = json.load(f)
@@ -226,6 +242,23 @@ def verificar_sites():
 
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(list(verificados), f, indent=2, ensure_ascii=False)
+
+    # === Diagnóstico adicional ===
+    diagnostico = {
+        "data_execucao": data_atual,
+        "total_arquivos_verificados": len(verificados),
+        "arquivos_novos_analisados": len(registros),
+        "ocorrencias_encontradas": len(registros),
+        "erros_ocorridos": []  # por enquanto estático; pode ser alimentado dinamicamente
+    }
+
+    print("\n📊 Diagnóstico da execução:")
+    print(json.dumps(diagnostico, indent=2, ensure_ascii=False))
+
+    with open("diagnostico.json", "w", encoding="utf-8") as f:
+        json.dump(diagnostico, f, indent=2, ensure_ascii=False)
+
+    
 
 # === EXECUÇÃO ===
 
