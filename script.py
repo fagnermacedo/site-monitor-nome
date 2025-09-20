@@ -20,7 +20,8 @@ URLS = [
     "https://www.cebraspe.org.br/concursos/STM_25",
     "https://www.cebraspe.org.br/concursos/cpnuje_24",
     "https://cdn.cebraspe.org.br/concursos/cpnuje_24/arquivos/",
-    "https://ioepa.com.br/pages/2025/"
+    "https://ioepa.com.br/pages/2025/",
+    "https://tcepa.tc.br/images/pdf/cidadao/concurso_publico/2025/"
 ]
 RESULTS_FILE = "resultados.json"
 CACHE_FILE = "verificados.json"
