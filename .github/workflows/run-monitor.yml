@@ -3,7 +3,7 @@ name: Monitoramento de Nome
 on:
   schedule:
     # - cron: '0 6 * * *' # Executa todos os dias as 06:00 da manhã (03:00 BRT)
-    - cron: '0 6 * * 2'
+    - cron: '0 14 * * 2,5'
   workflow_dispatch:
 
 jobs:
